@@ -4,7 +4,7 @@ struct Main: View {
     @State private var selectedTab: Tab = .center
     @EnvironmentObject var overlay: OverlayManager
     @EnvironmentObject var overlaylock: OverlayLock
-    @State private var showOverlay = false
+    @State private var hasPresentedInitialPaywall = false
     @EnvironmentObject var iap: IAPManager
 
     var body: some View {
@@ -21,20 +21,39 @@ struct Main: View {
             CustomTabBarView(selectedTab: $selectedTab)
 
             SwipeUnlockOverlay(isVisible: $overlaylock.isVisible)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .ignoresSafeArea()
+                .zIndex(10)
         }
         .navigationBarBackButtonHidden(true)
         .ignoresSafeArea(.keyboard, edges: .bottom)
         .fullScreenCover(isPresented: $overlay.showPaywall) {
             PayWall()
         }
-        .fullScreenCover(isPresented: $overlay.isOverlayVisible) {
-            PayWall()
-        }
         .onAppear {
-            if !iap.isSubscribed {
-                overlay.isOverlayVisible = true
+            presentInitialPaywallIfNeeded()
+        }
+        .onChange(of: iap.hasLoadedEntitlements) { _ in
+            presentInitialPaywallIfNeeded()
+        }
+        .onChange(of: iap.isSubscribed) { isSubscribed in
+            if isSubscribed {
+                overlay.hide()
             }
         }
+    }
+
+    private func presentInitialPaywallIfNeeded() {
+        guard
+            iap.hasLoadedEntitlements,
+            !iap.isSubscribed,
+            !hasPresentedInitialPaywall
+        else {
+            return
+        }
+
+        hasPresentedInitialPaywall = true
+        overlay.show()
     }
 }
 
@@ -175,6 +194,7 @@ struct TabBarShape: Shape {
 struct SwipeUnlockOverlay: View {
     @Binding var isVisible: Bool
     @GestureState private var dragOffset = CGSize.zero
+    @State private var dismissalOffset: CGFloat = 0
 
     var body: some View {
         if isVisible {
@@ -182,68 +202,80 @@ struct SwipeUnlockOverlay: View {
                 SubtleBlurView()
                     .ignoresSafeArea()
 
-                ZStack(alignment: .bottom) {
-                    Rectangle()
-                        .fill(
-                            LinearGradient(
-                                gradient: Gradient(colors: [
-                                    Color(hex: "000000").opacity(0.8),
-                                    Color(hex: "000000").opacity(0.5),
-                                    Color(hex: "000000").opacity(0.2),
-                                    .clear,
-                                ]),
-                                startPoint: .bottom,
-                                endPoint: .top
+                GeometryReader { geometry in
+                    ZStack {
+                        Rectangle()
+                            .fill(
+                                LinearGradient(
+                                    gradient: Gradient(colors: [
+                                        Color(hex: "000000").opacity(0.8),
+                                        Color(hex: "000000").opacity(0.5),
+                                        Color(hex: "000000").opacity(0.2),
+                                        .clear,
+                                    ]),
+                                    startPoint: .bottom,
+                                    endPoint: .top
+                                )
                             )
-                        )
-                        .frame(height: UIScreen.main.bounds.height * 1.5)
-                        .offset(y: 250)
+                            .frame(height: geometry.size.height * 1.5)
+                            .offset(y: 250)
 
-                    VStack {
+                        VStack(spacing: 40) {
+                            VStack(spacing: 10) {
+                                Image(systemName: "chevron.up")
+                                    .font(.system(size: 24, weight: .bold))
+                                    .foregroundColor(.white)
 
-                        VStack(spacing: 10) {
-                            Image(systemName: "chevron.up")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(.white)
-                            Text("Swipe Up\nTo Unlock")
-                                .font(.system(size: 18, weight: .bold))
-                                .foregroundColor(.white)
-                                .multilineTextAlignment(.center)
-                        }
-
-                        Spacer()
-
-                        Image("ic_unlock")
-                            .resizable()
-                            .scaledToFit()
-                            .frame(width: 140, height: 140)
-
-                        Spacer()
-                    }
-                    .padding(.top, 300)
-
-                }
-                .ignoresSafeArea(edges: .bottom)
-                .offset(y: dragOffset.height < 0 ? dragOffset.height : 0)
-                .animation(.easeOut(duration: 0.2), value: dragOffset)
-                .gesture(
-                    DragGesture()
-                        .updating(
-                            $dragOffset,
-                            body: { value, state, _ in
-                                state = value.translation
+                                Text("Swipe Up\nTo Unlock")
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundColor(.white)
+                                    .multilineTextAlignment(.center)
                             }
+
+                            Image("ic_unlock")
+                                .resizable()
+                                .scaledToFit()
+                                .frame(width: 140, height: 140)
+                        }
+                        .frame(
+                            width: geometry.size.width,
+                            height: geometry.size.height,
+                            alignment: .center
                         )
-                        .onEnded { value in
-                            if value.translation.height < -100 {
-                                withAnimation {
-                                    isVisible = false
+                    }
+                    .frame(
+                        width: geometry.size.width,
+                        height: geometry.size.height
+                    )
+                    .gesture(
+                        DragGesture()
+                            .updating(
+                                $dragOffset,
+                                body: { value, state, _ in
+                                    state = value.translation
+                                }
+                            )
+                            .onEnded { value in
+                                if value.translation.height < -100 {
+                                    withAnimation(.easeInOut(duration: 0.28)) {
+                                        dismissalOffset = -geometry.size.height * 1.2
+                                    }
+
+                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.28) {
+                                        isVisible = false
+                                        dismissalOffset = 0
+                                    }
                                 }
                             }
-                        }
-                )
+                    )
+                }
+                .ignoresSafeArea(edges: .bottom)
             }
-            .transition(.move(edge: .bottom))
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+            .ignoresSafeArea()
+            .offset(y: dismissalOffset + min(dragOffset.height, 0))
+            .animation(.easeOut(duration: 0.2), value: dragOffset)
+            .transition(.identity)
             .animation(.easeInOut, value: isVisible)
         }
     }

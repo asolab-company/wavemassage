@@ -10,13 +10,14 @@ struct SettingsItem: Identifiable {
 struct Settings: View {
     @EnvironmentObject var overlay: OverlayManager
     @EnvironmentObject var iap: IAPManager
+    @Environment(\.openURL) private var openURL
 
     var items: [SettingsItem] {
-        [
+        var settingsItems = [
             SettingsItem(
                 icon: "app_ic_help",
                 label: "Get Help",
-                action: { UIApplication.shared.open(Constants.helpURL) }
+                action: { openURL(Constants.helpURL) }
             ),
             SettingsItem(
                 icon: "app_ic_rate",
@@ -26,21 +27,24 @@ struct Settings: View {
                         string:
                             "itms-apps://itunes.apple.com/app/id\(Constants.appID)?action=write-review"
                     ) {
-                        UIApplication.shared.open(url)
+                        openURL(url)
                     }
                 }
             ),
             SettingsItem(
                 icon: "app_ic_terms",
                 label: "Terms and Conditions",
-                action: { UIApplication.shared.open(Constants.termsURL) }
+                action: { openURL(Constants.termsURL) }
             ),
             SettingsItem(
                 icon: "app_ic_privacy",
                 label: "Privacy",
-                action: { UIApplication.shared.open(Constants.privacyURL) }
-            ),
-            SettingsItem(
+                action: { openURL(Constants.privacyURL) }
+            )
+        ]
+
+        if !iap.isSubscribed {
+            settingsItems.append(SettingsItem(
                 icon: "app_ic_restore",
                 label: "Restore Purchases",
                 action: {
@@ -48,8 +52,10 @@ struct Settings: View {
                         await iap.restorePurchases()
                     }
                 }
-            ),
-        ]
+            ))
+        }
+
+        return settingsItems
     }
 
     var body: some View {

@@ -1,38 +1,12 @@
 import SwiftUI
 
-struct MassageMode: Identifiable {
-    let id: String
-    let name: String
-    let iconName: String
-    let isLocked: Bool
-
-    init(name: String, iconName: String, isLocked: Bool) {
-        self.id = name
-        self.name = name
-        self.iconName = iconName
-        self.isLocked = isLocked
-    }
-}
 struct Massages: View {
     @EnvironmentObject var overlay: OverlayManager
     @EnvironmentObject var iap: IAPManager
     @Environment(\.scenePhase) private var scenePhase
     @State private var selectedModeID: String? = nil
 
-    let modes: [MassageMode] = [
-        .init(name: "Pulse", iconName: "ic_pulse", isLocked: false),
-        .init(name: "Breeze", iconName: "ic_breze", isLocked: false),
-        .init(name: "Storm", iconName: "ic_shtorm", isLocked: true),
-        .init(name: "Big Wave", iconName: "ic_wave", isLocked: true),
-        .init(name: "Small Wave", iconName: "ic_wave_1", isLocked: true),
-        .init(name: "Eruption", iconName: "ic_eruption", isLocked: true),
-        .init(name: "Space", iconName: "ic_space", isLocked: true),
-        .init(name: "Comet", iconName: "ic_comet", isLocked: true),
-        .init(name: "Ship", iconName: "ic_ship", isLocked: true),
-        .init(name: "Harp", iconName: "ic_harp", isLocked: true),
-        .init(name: "Drums", iconName: "ic_drums", isLocked: true),
-        .init(name: "Auger", iconName: "ic_auger", isLocked: true),
-    ]
+    let modes = MassageCatalog.modes
 
     let columns = [
         GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()),
@@ -47,40 +21,44 @@ struct Massages: View {
                     .font(.custom("SFProDisplay-Regular", size: 20))
                     .foregroundColor(.white)
 
-                LazyVGrid(
-                    columns: columns,
-                    spacing: UIScreen.main.bounds.height * 0.03
-                ) {
-                    ForEach(modes) { mode in
-                        VStack(spacing: 8) {
-                            let isUnlocked = !mode.isLocked || iap.isSubscribed
+                GeometryReader { geometry in
+                    LazyVGrid(
+                        columns: columns,
+                        spacing: geometry.size.height * 0.03
+                    ) {
+                        ForEach(modes) { mode in
+                            VStack(spacing: 8) {
+                                let isUnlocked =
+                                    !mode.isLocked || iap.isSubscribed
 
-                            MassageButton(
-                                mode: mode,
-                                isSelected: selectedModeID == mode.id,
-                                isUnlocked: isUnlocked,
-                                action: {
-                                    if selectedModeID == mode.id {
-                                        selectedModeID = nil
-                                        VibrationManager.shared.stop()
-                                    } else {
-                                        selectedModeID = mode.id
-                                        if let style = MassageStyle.from(
-                                            name: mode.name
-                                        ) {
+                                MassageButton(
+                                    mode: mode,
+                                    isSelected: selectedModeID == mode.id,
+                                    isUnlocked: isUnlocked,
+                                    action: {
+                                        if selectedModeID == mode.id {
+                                            selectedModeID = nil
+                                            VibrationManager.shared.stop()
+                                        } else {
+                                            selectedModeID = mode.id
                                             VibrationManager.shared.play(
-                                                style: style
+                                                style: mode.style
                                             )
                                         }
+                                    },
+                                    onLockedTap: {
+                                        overlay.show()
                                     }
-                                },
-                                onLockedTap: {
-                                    overlay.show()
-                                }
-                            )
-                            Text(mode.name)
-                                .font(.custom("SFProDisplay-Regular", size: 14))
-                                .foregroundColor(.white)
+                                )
+                                Text(mode.name)
+                                    .font(
+                                        .custom(
+                                            "SFProDisplay-Regular",
+                                            size: 14
+                                        )
+                                    )
+                                    .foregroundColor(.white)
+                            }
                         }
                     }
                 }

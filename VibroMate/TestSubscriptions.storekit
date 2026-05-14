@@ -86,7 +86,7 @@
           "groupNumber" : 1,
           "internalID" : "E8C9335B",
           "introductoryOffer" : {
-            "displayPrice" : "0.99",
+            "displayPrice" : "0.00",
             "internalID" : "85DBB4CD",
             "paymentMode" : "free",
             "subscriptionPeriod" : "P3D"
@@ -101,34 +101,6 @@
           "productID" : "weekly_sub_id",
           "recurringSubscriptionPeriod" : "P1W",
           "referenceName" : "Weekly",
-          "subscriptionGroupID" : "DD52FEB6",
-          "type" : "RecurringSubscription",
-          "winbackOffers" : [
-
-          ]
-        },
-        {
-          "adHocOffers" : [
-
-          ],
-          "codeOffers" : [
-
-          ],
-          "displayPrice" : "44.99",
-          "familyShareable" : false,
-          "groupNumber" : 1,
-          "internalID" : "95E84C6F",
-          "introductoryOffer" : null,
-          "localizations" : [
-            {
-              "description" : "",
-              "displayName" : "",
-              "locale" : "en_US"
-            }
-          ],
-          "productID" : "yearly_sub_id",
-          "recurringSubscriptionPeriod" : "P1Y",
-          "referenceName" : "Yearly",
           "subscriptionGroupID" : "DD52FEB6",
           "type" : "RecurringSubscription",
           "winbackOffers" : [

@@ -2,6 +2,7 @@ import SwiftUI
 
 struct Onboarding: View {
     @State private var currentTab = 0
+    @Environment(\.openURL) private var openURL
     var onFinish: () -> Void
 
     var body: some View {
@@ -80,7 +81,7 @@ struct Onboarding: View {
                                 .foregroundColor(Color(hex: "BABABA"))
                                 .font(.custom("SFProDisplay-Medium", size: 13))
                             Button(action: {
-                                UIApplication.shared.open(Constants.termsURL)
+                                openURL(Constants.termsURL)
                             }) {
                                 Text("Terms Of Use")
                                     .foregroundColor(Color(hex: "#AC57A7"))
@@ -92,7 +93,7 @@ struct Onboarding: View {
                                 .foregroundColor(Color(hex: "BABABA"))
                                 .font(.custom("SFProDisplay-Medium", size: 13))
                             Button(action: {
-                                UIApplication.shared.open(Constants.privacyURL)
+                                openURL(Constants.privacyURL)
                             }) {
                                 Text("Privacy Policy")
                                     .foregroundColor(Color(hex: "#AC57A7"))

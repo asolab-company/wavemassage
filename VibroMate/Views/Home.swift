@@ -18,20 +18,7 @@ struct Home: View {
     @State private var isMainButtonOn = false
     @State private var isLockOn = false
 
-    let modes: [MassageMode] = [
-        .init(name: "Pulse", iconName: "ic_pulse", isLocked: false),
-        .init(name: "Breeze", iconName: "ic_breze", isLocked: false),
-        .init(name: "Storm", iconName: "ic_shtorm", isLocked: true),
-        .init(name: "Big Wave", iconName: "ic_wave", isLocked: true),
-        .init(name: "Small Wave", iconName: "ic_wave_1", isLocked: true),
-        .init(name: "Eruption", iconName: "ic_eruption", isLocked: true),
-        .init(name: "Space", iconName: "ic_space", isLocked: true),
-        .init(name: "Comet", iconName: "ic_comet", isLocked: true),
-        .init(name: "Ship", iconName: "ic_ship", isLocked: true),
-        .init(name: "Harp", iconName: "ic_harp", isLocked: true),
-        .init(name: "Drums", iconName: "ic_drums", isLocked: true),
-        .init(name: "Auger", iconName: "ic_auger", isLocked: true),
-    ]
+    let modes = MassageCatalog.modes
 
     let columns = [
         GridItem(.flexible()), GridItem(.flexible()), GridItem(.flexible()),
@@ -87,13 +74,9 @@ struct Home: View {
                                         selectedModeID = mode.id
 
                                         if isMainButtonOn {
-                                            if let style = MassageStyle.from(
-                                                name: mode.name
-                                            ) {
-                                                VibrationManager.shared.play(
-                                                    style: style
-                                                )
-                                            }
+                                            VibrationManager.shared.play(
+                                                style: mode.style
+                                            )
                                         }
                                     },
                                     onLockedTap: {
@@ -125,26 +108,7 @@ struct Home: View {
 
                         ZStack {
 
-                            Button(action: {
-                                isMainButtonOn.toggle()
-
-                                if isMainButtonOn {
-                                    if let selected = selectedModeID,
-                                        let selectedMode = modes.first(where: {
-                                            $0.id == selected
-                                        }),
-                                        let style = MassageStyle.from(
-                                            name: selectedMode.name
-                                        )
-                                    {
-                                        VibrationManager.shared.play(
-                                            style: style
-                                        )
-                                    }
-                                } else {
-                                    VibrationManager.shared.stop()
-                                }
-                            }) {
+                            Button(action: toggleMainButton) {
                                 Image(isMainButtonOn ? "ic_off" : "ic_on")
                                     .resizable()
                                     .scaledToFit()
@@ -213,6 +177,26 @@ struct Home: View {
         }
 
     }
+
+    private func toggleMainButton() {
+        isMainButtonOn.toggle()
+
+        if isMainButtonOn {
+            playSelectedMode()
+        } else {
+            VibrationManager.shared.stop()
+        }
+    }
+
+    private func playSelectedMode() {
+        guard let selectedModeID,
+            let selectedMode = modes.first(where: { $0.id == selectedModeID })
+        else {
+            return
+        }
+
+        VibrationManager.shared.play(style: selectedMode.style)
+    }
 }
 
 private struct MassageButton: View {
@@ -269,6 +253,7 @@ private struct MassageButton: View {
 struct DifficultySelectorView: View {
     @State private var selected: Difficulty = .easy
     @EnvironmentObject var iap: IAPManager
+    @EnvironmentObject var overlay: OverlayManager
 
     enum Difficulty: String, CaseIterable {
         case easy = "Easy"
@@ -318,6 +303,8 @@ struct DifficultySelectorView: View {
                         VibrationSettings.shared.intensity = intensityForLevel(
                             level
                         )
+                    } else {
+                        overlay.show()
                     }
                 }
             }
@@ -327,6 +314,12 @@ struct DifficultySelectorView: View {
         .clipShape(RoundedRectangle(cornerRadius: 30))
         .frame(height: 46)
         .padding(.horizontal, 20)
+        .onChange(of: iap.isSubscribed) { isSubscribed in
+            if !isSubscribed && isLocked(selected) {
+                selected = .easy
+                VibrationSettings.shared.intensity = .light
+            }
+        }
     }
 
     private func isLocked(_ level: Difficulty) -> Bool {
@@ -378,6 +371,11 @@ struct RoundedCorner: Shape {
 struct CustomSliderView: View {
     @ObservedObject private var settings = VibrationSettings.shared
     @EnvironmentObject var iap: IAPManager
+    @EnvironmentObject var overlay: OverlayManager
+    @State private var didShowLockedSpeedPaywall = false
+
+    private let freeMaxProgress: CGFloat = 0.4
+
     var body: some View {
         VStack {
             HStack(spacing: 16) {
@@ -405,6 +403,14 @@ struct CustomSliderView: View {
                             )
 
                         if !iap.isSubscribed {
+                            Capsule()
+                                .fill(Color.black.opacity(0.12))
+                                .frame(
+                                    width: width * (1 - freeMaxProgress),
+                                    height: 8
+                                )
+                                .offset(x: width * freeMaxProgress)
+
                             Image("ic_lock")
                                 .resizable()
                                 .scaledToFit()
@@ -442,10 +448,22 @@ struct CustomSliderView: View {
                         DragGesture(minimumDistance: 0)
                             .onChanged { gesture in
                                 let newValue = gesture.location.x / width
+                                let normalizedValue = min(max(0, newValue), 1)
+                                let maxProgress =
+                                    iap.isSubscribed ? 1.0 : freeMaxProgress
                                 let clampedValue = min(
-                                    max(0, newValue),
-                                    iap.isSubscribed ? 1.0 : 0.4
+                                    normalizedValue,
+                                    maxProgress
                                 )
+
+                                if !iap.isSubscribed,
+                                    normalizedValue > freeMaxProgress,
+                                    !didShowLockedSpeedPaywall
+                                {
+                                    didShowLockedSpeedPaywall = true
+                                    overlay.show()
+                                }
+
                                 settings.speed = Float(clampedValue * 2.0)
                             }
                     )
@@ -465,6 +483,19 @@ struct CustomSliderView: View {
             .clipShape(RoundedRectangle(cornerRadius: 30))
             .padding(.horizontal, 20)
         }
+        .onAppear {
+            clampSpeedForCurrentEntitlement()
+        }
+        .onChange(of: iap.isSubscribed) { _ in
+            didShowLockedSpeedPaywall = false
+            clampSpeedForCurrentEntitlement()
+        }
+    }
+
+    private func clampSpeedForCurrentEntitlement() {
+        guard !iap.isSubscribed else { return }
+
+        settings.speed = min(settings.speed, Float(freeMaxProgress * 2.0))
     }
 }
 
@@ -486,7 +517,6 @@ struct CustomTopRoundedShape: Shape {
 
     func path(in rect: CGRect) -> Path {
         var path = Path()
-        let curveHeight: CGFloat = radius
 
         path.move(to: .zero)
         path.addLine(to: CGPoint(x: rect.midX - radius, y: 0))
